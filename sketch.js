@@ -1,52 +1,235 @@
-// Start speech recognition
-function startSpeechRecognition() {
-  if (speechRec && !isRecognizing) {
-    try {
-      speechRec.start();
-      isRecognizing = true;
-      console.log("Speech recognition started");
-    } catch (err) {
-      console.error("Could not start speech recognition:", err);
-      alert("无法启动语音识别！\nCould not start speech recognition!");
+// Draw the text expansion transition
+function drawTransition() {
+  // Draw cosmic background first
+  drawInsideStarBackground();
+  
+  // Draw the clicked star to emphasize it as the source
+  if (currentStar) {
+    // Draw the star
+    fill(currentStar.hue, currentStar.saturation, currentStar.brightness);
+    noStroke();
+    ellipse(currentStar.x, currentStar.y, currentStar.radius * 2);
+    
+    // Draw glow
+    for (let i = currentStar.radius * 3; i >= currentStar.radius; i -= 2) {
+      let alpha = map(i, currentStar.radius * 3, currentStar.radius, 0, 150);
+      alpha = alpha * (1 - transitionProgress); // Fade out as transition progresses
+      fill(currentStar.hue, currentStar.saturation, currentStar.brightness, alpha);
+      ellipse(currentStar.x, currentStar.y, i * 2);
+    }
+  }
+  
+  // Draw expanding text particles
+  for (let i = 0; i < transitionTexts.length; i++) {
+    let t = transitionTexts[i];
+    
+    // Calculate current position based on progress
+    let currentX = lerp(t.startX, t.endX, transitionProgress);
+    let currentY = lerp(t.startY, t.endY, transitionProgress);
+    
+    // Calculate opacity (fade in)
+    let opacity = map(transitionProgress, 0, 0.5, 0, 255);
+    
+    // Calculate size (grow from small)
+    let currentSize = map(transitionProgress, 0, 0.7, 5, t.size);
+    
+    // Draw the character
+    fill(t.hue, 70, 100, opacity);
+    textSize(currentSize);
+    text(t.char, currentX, currentY);
+    
+    // Draw optional trail effect
+    if (transitionProgress < 0.8) {
+      for (let j = 1; j <= 3; j++) {
+        let trailProgress = max(0, transitionProgress - j * 0.05);
+        let trailX = lerp(t.startX, t.endX, trailProgress);
+        let trailY = lerp(t.startY, t.endY, trailProgress);
+        let trailOpacity = opacity * (1 - j * 0.3);
+        let trailSize = currentSize * (1 - j * 0.2);
+        
+        fill(t.hue, 70, 100, trailOpacity);
+        textSize(trailSize);
+        text(t.char, trailX, trailY);
+      }
+    }
+  }
+  
+  // Draw exit button with fade in
+  if (transitionProgress > 0.7) {
+    let buttonOpacity = map(transitionProgress, 0.7, 1, 0, 255);
+    fill(0, 0, 80, buttonOpacity);
+    noStroke();
+    rect(width - 100, 20, 80, 40, 20);
+    
+    fill(0, 0, 100, buttonOpacity);
+    textSize(16);
+    text("返回 / Back", width - 60, 40);
+  }
+}// Start text expansion transition
+function startTextExpansionTransition(star) {
+  // Prepare transition
+  transitionActive = true;
+  transitionProgress = 0;
+  transitionCounter = 0;
+  transitionTexts = [];
+  
+  // Set up floating texts (but don't switch to inside star view yet)
+  // Create placeholder texts at star position for transition
+  let memoryTexts = prepareMemoryTexts(star);
+  
+  // Store current star position for transition
+  let starX = star.x;
+  let starY = star.y;
+  
+  // Create transition texts (all starting at the star's position)
+  for (let i = 0; i < memoryTexts.length; i++) {
+    let memory = memoryTexts[i];
+    
+    for (let j = 0; j < memory.text.length; j++) {
+      let char = memory.text.charAt(j);
+      
+      // All characters start at star position
+      let startX = starX;
+      let startY = starY;
+      
+      // Final random position
+      let endX = random(width * 0.1, width * 0.9);
+      let endY = random(height * 0.1, height * 0.9);
+      
+      // Final organized position (for later use)
+      let organizedX = memory.startX + j * (memory.isChinese ? 40 : 18);
+      let organizedY = memory.yPosition;
+      
+      // Font size
+      let size = memory.isChinese ? random(24, 40) : random(18, 32);
+      
+      // Create transition text object
+      transitionTexts.push({
+        char: char,
+        startX: startX,
+        startY: startY,
+        endX: endX,
+        endY: endY,
+        organizedX: organizedX,
+        organizedY: organizedY,
+        size: size,
+        opacity: 0, // Start transparent
+        hue: random(180, 360)
+      });
     }
   }
 }
 
-// Stop speech recognition
-function stopSpeechRecognition() {
-  if (speechRec && isRecognizing) {
-    try {
-      speechRec.stop();
-      isRecognizing = false;
-      console.log("Speech recognition stopped");
-    } catch (err) {
-      console.error("Could not stop speech recognition:", err);
+// Create structured memory texts for transition
+function prepareMemoryTexts(star) {
+  let result = [];
+  
+  // Organize memories by type
+  let chineseMemories = [];
+  let englishMemories = [];
+  
+  for (let i = 0; i < star.memories.length; i++) {
+    let memory = star.memories[i];
+    
+    if (/[\u4e00-\u9fa5]/.test(memory.charAt(0))) {
+      chineseMemories.push(memory);
+    } else {
+      englishMemories.push(memory);
     }
   }
-}
-
-// Create a star from recognized voice
-function createStarFromVoice(text) {
-  if (text && text.trim() !== "") {
-    // Add to memories list
-    memories.push(text);
+  
+  // Add Chinese memories with positions
+  for (let i = 0; i < chineseMemories.length; i++) {
+    result.push({
+      text: chineseMemories[i],
+      startX: width * 0.25,
+      yPosition: height * 0.3 + i * 50,
+      isChinese: true
+    });
+  }
+  
+  // Add English memories with positions
+  for (let i = 0; i < englishMemories.length; i++) {
+    result.push({
+      text: englishMemories[i],
+      startX: width * 0.25,
+      yPosition: height * 0.6 + i * 40,
+      isChinese: false
+    });
+  }
+  
+  return result;
+}// Variables for text expansion transition
+let transitionActive = false;
+let transitionProgress = 0;
+let transitionDuration = 120; // Number of frames for transition
+let transitionCounter = 0;
+let transitionTexts = [];// FloatingText class for characters inside stars
+class FloatingText {
+  constructor(character, x, y, size, organizedX, organizedY) {
+    this.character = character;
+    this.x = x;
+    this.y = y;
+    this.targetX = x;
+    this.targetY = y;
+    this.organizedX = organizedX || width/2;
+    this.organizedY = organizedY || height/2;
+    this.size = size;
     
-    // Create a new star with this memory
-    let x = random(width * 0.1, width * 0.9);
-    let y = random(height * 0.1, height * 0.9);
-    let size = random(5, 15);
+    // Movement properties
+    this.xSpeed = random(-0.5, 0.5);
+    this.ySpeed = random(-0.5, 0.5);
     
-    let star = new Star(x, y, size, [text]);
-    star.highlight = true;
-    stars.push(star);
+    // Appearance properties
+    this.opacity = random(150, 255);
+    this.hue = random(180, 360);
     
-    // Play ascending note sequence for new memory
-    let baseNote = 261.63; // C4
-    playTone(baseNote, 150);
-    setTimeout(() => playTone(baseNote * 5/4, 150), 150); // E4
-    setTimeout(() => playTone(baseNote * 3/2, 150), 300); // G4
+    // Animation properties
+    this.movementSpeed = random(0.03, 0.06);
+  }
+  
+  update(organized = false) {
+    if (organized && !blowingActive) {
+      // Move toward organized position
+      this.targetX = this.organizedX;
+      this.targetY = this.organizedY;
+    } else {
+      // Continue random movement or respond to blowing
+      this.xSpeed += random(-0.1, 0.1);
+      this.ySpeed += random(-0.1, 0.1);
+      
+      // Cap speeds
+      this.xSpeed = constrain(this.xSpeed, -1, 1);
+      this.ySpeed = constrain(this.ySpeed, -1, 1);
+      
+      // Update target position based on random movement
+      this.targetX += this.xSpeed;
+      this.targetY += this.ySpeed;
+      
+      // Bounce off edges
+      if (this.targetX < width * 0.1 || this.targetX > width * 0.9) {
+        this.xSpeed *= -1;
+        this.targetX += this.xSpeed * 2;
+      }
+      if (this.targetY < height * 0.1 || this.targetY > height * 0.9) {
+        this.ySpeed *= -1;
+        this.targetY += this.ySpeed * 2;
+      }
+    }
     
-    console.log("Created star from voice input:", text);
+    // Smoothly move toward target
+    this.x = lerp(this.x, this.targetX, this.movementSpeed);
+    this.y = lerp(this.y, this.targetY, this.movementSpeed);
+  }
+  
+  display() {
+    // Adapt opacity based on how close to target position
+    let distance = dist(this.x, this.y, this.targetX, this.targetY);
+    let dynamicOpacity = map(distance, 0, 50, this.opacity, this.opacity * 0.7);
+    
+    fill(this.hue, 70, 100, dynamicOpacity);
+    textSize(this.size);
+    text(this.character, this.x, this.y);
   }
 }// Memory Nebula - Interactive Art Project
 // A thousand-year portal to share memories with the future
@@ -64,6 +247,9 @@ let textOrganized = false;  // Flag to track if text is organized or scattered
 let speechRec;        // Speech recognition object
 let recordedText = ""; // Text recorded from speech recognition
 let isRecognizing = false; // Flag to track if speech recognition is active
+let blowingActive = false;  // Flag to track if blowing effect is active
+let blowingMicLevel = 0;    // Blowing microphone level
+let lastBlowingTime = 0;    // Last time a blow was detected
 let memories = [         // Initial memories
   "我还记得童年时的那个夏天，蝉鸣声中的冰棍是最甜的",
   "The popsicle in the cicada sound of that summer in my childhood was the sweetest",
@@ -148,22 +334,48 @@ function setup() {
 }
 
 function draw() {
+  // Clear the background
+  background(240, 30, 15); // Dark blue background in HSB
+  
+  // Handle transition if active
+  if (transitionActive) {
+    drawTransition();
+    transitionCounter++;
+    
+    // Update transition progress
+    transitionProgress = min(1, transitionCounter / transitionDuration);
+    
+    // Check if transition is complete
+    if (transitionProgress >= 1) {
+      // Finish transition and set up the actual star view
+      transitionActive = false;
+      setupFloatingTextForStar(currentStar);
+    }
+    
+    return; // Skip the rest of draw during transition
+  }
+  
   if (!insideStar) {
-    // Display nebula
-    background(240, 30, 15); // Dark blue background in HSB
+    // In nebula view
     
     // Get microphone level if initialized
-    if (micInitialized && micRecording) {
+    if (micInitialized) {
       micLevel = mic.getLevel();
       
-      // Debug - check if mic is working
-      if (frameCount % 60 === 0) {
-        console.log("Mic level:", micLevel);
+      // Also update blowing level if active
+      if (blowingActive) {
+        blowingMicLevel = micLevel;
+        
+        // Apply blowing effect if sufficient level
+        if (blowingMicLevel > 0.1) {
+          applyBlowingToStars(mouseX, mouseY, blowingMicLevel);
+        }
       }
     } else {
       micLevel = 0;
     }
     
+    // Draw background stars
     drawBackgroundStars();
     
     // Update and display all stars
@@ -188,8 +400,9 @@ function draw() {
     text("点击星星查看记忆 / Click stars to view memories", width / 2, height - 30);
     text("按空格键添加你的记忆 / Press SPACE to add your memory", width / 2, height - 50);
     
-    // Show mic control button
-    drawMicButton();
+    // Show mic buttons
+    drawVoiceButton();
+    drawBlowButton();
     
     // Show speech recognition status if active
     if (isRecognizing) {
@@ -200,7 +413,7 @@ function draw() {
     }
     
     // Show mic level if active
-    if (micInitialized && micRecording) {
+    if (micInitialized && (micRecording || blowingActive)) {
       let levelHeight = map(micLevel, 0, 0.5, 0, 50);
       fill(100, 80, 100, 200);
       rect(20, height - 20 - levelHeight, 10, levelHeight);
@@ -208,7 +421,16 @@ function draw() {
     
   } else {
     // Inside a star view
-    background(240, 30, 15); // Dark blue background
+    
+    // Handle blowing effect in star view
+    if (micInitialized && blowingActive) {
+      blowingMicLevel = mic.getLevel();
+      
+      // Apply blowing to text if sufficient level
+      if (blowingMicLevel > 0.1) {
+        applyBlowingToText(mouseX, mouseY, blowingMicLevel);
+      }
+    }
     
     // Draw cosmic background
     drawInsideStarBackground();
@@ -222,6 +444,9 @@ function draw() {
     
     // Display exit button
     drawExitButton();
+    
+    // Display blow button in star view
+    drawBlowButton();
     
     // Display instruction for text organization
     fill(0, 0, 100, 200);
@@ -285,19 +510,25 @@ function drawInsideStarBackground() {
   }
 }
 
-// Draw exit button
-function drawExitButton() {
-  fill(0, 0, 80, 100);
+// Draw blowing mic button
+function drawBlowButton() {
+  // Button background
+  fill(blowingActive ? 0 : 100, 80, 90, 200);
   noStroke();
-  rect(width - 100, 20, 80, 40, 20);
+  rect(20, height - 70, 160, 40, 20);
   
+  // Button text
   fill(0, 0, 100);
   textSize(16);
-  text("返回 / Back", width - 60, 40);
+  if (blowingActive) {
+    text("停止吹气 / Stop Blowing", 100, height - 50);
+  } else {
+    text("开始吹气 / Start Blowing", 100, height - 50);
+  }
 }
 
-// Draw microphone button
-function drawMicButton() {
+// Draw voice recognition button
+function drawVoiceButton() {
   // Button background
   fill(isRecognizing ? 0 : 100, 80, 90, 200);
   noStroke();
@@ -313,11 +544,22 @@ function drawMicButton() {
   }
 }
 
+// Draw exit button
+function drawExitButton() {
+  fill(0, 0, 80, 100);
+  noStroke();
+  rect(width - 100, 20, 80, 40, 20);
+  
+  fill(0, 0, 100);
+  textSize(16);
+  text("返回 / Back", width - 60, 40);
+}
+
 // Create a new star with random properties
 function createNewStar() {
   // Select random memories for this star
   let starMemories = [];
-  let numMemories = floor(random(2, 5)); // 2-4 memories per star
+  let numMemories = floor(random(1, 3)); // 1-2 memories per star
   
   for (let i = 0; i < numMemories; i++) {
     let index = floor(random(memories.length));
@@ -343,12 +585,101 @@ function playTone(freq, dur) {
   }, dur);
 }
 
+// Toggle blowing effect
+function toggleBlowing() {
+  if (!micInitialized) {
+    // Initialize microphone
+    userStartAudio().then(() => {
+      console.log("Audio initialized for blowing");
+      mic = new p5.AudioIn();
+      mic.start();
+      micInitialized = true;
+      blowingActive = true;
+    }).catch(err => {
+      console.error("Audio initialization failed:", err);
+      alert("无法启动麦克风！请检查浏览器权限。\nMicrophone initialization failed!");
+    });
+  } else {
+    // Toggle blowing state
+    blowingActive = !blowingActive;
+    
+    // Play sound to indicate state change
+    if (blowingActive) {
+      playTone(587.33, 100); // D5
+    } else {
+      playTone(523.25, 100); // C5
+    }
+  }
+}
+
+// Apply blowing effect to stars
+function applyBlowingToStars(centerX, centerY, strength) {
+  // Blowing influence radius
+  let blowRadius = map(strength, 0.1, 1, 100, 400);
+  
+  for (let i = 0; i < stars.length; i++) {
+    let star = stars[i];
+    
+    // Calculate distance
+    let d = dist(centerX, centerY, star.x, star.y);
+    
+    // If within influence range
+    if (d < blowRadius) {
+      // Calculate blowing force (stronger when closer)
+      let force = map(d, 0, blowRadius, strength * 30, 0);
+      
+      // Calculate direction
+      let angle = atan2(star.y - centerY, star.x - centerX);
+      
+      // Apply force
+      star.applyForce(force * cos(angle), force * sin(angle));
+      
+      // Change star size
+      star.radius = constrain(star.radius + random(-1, 3) * strength, 2, 20);
+    }
+  }
+}
+
+// Apply blowing effect to text
+function applyBlowingToText(centerX, centerY, strength) {
+  // Blowing influence radius
+  let blowRadius = map(strength, 0.1, 1, 150, 500);
+  
+  for (let i = 0; i < floatingTexts.length; i++) {
+    let text = floatingTexts[i];
+    
+    // Calculate distance
+    let d = dist(centerX, centerY, text.x, text.y);
+    
+    // If within influence range
+    if (d < blowRadius) {
+      // Calculate blowing force (stronger when closer)
+      let force = map(d, 0, blowRadius, strength * 50, 0);
+      
+      // Calculate direction
+      let angle = atan2(text.y - centerY, text.x - centerX);
+      
+      // Apply force (directly change speed)
+      text.xSpeed += force * cos(angle) * 0.5;
+      text.ySpeed += force * sin(angle) * 0.5;
+      
+      // Change font size
+      text.size = constrain(text.size + random(-2, 5) * strength, 10, 60);
+    }
+  }
+}
+
 // Handle mouse clicks
 function mousePressed() {
-  // Check if mic button was clicked
+  // Check if blowing button was clicked
+  if (mouseX > 20 && mouseX < 180 && mouseY > height - 70 && mouseY < height - 30) {
+    toggleBlowing();
+    return;
+  }
+  
+  // Check if voice button was clicked in nebula view
   if (!insideStar && mouseX > width - 180 && mouseX < width - 20 && 
       mouseY > height - 70 && mouseY < height - 30) {
-    
     toggleMicrophone();
     return;
   }
@@ -357,9 +688,9 @@ function mousePressed() {
     // Check if a star was clicked
     for (let i = 0; i < stars.length; i++) {
       if (stars[i].contains(mouseX, mouseY)) {
-        // Enter this star
+        // Enter this star with text expansion transition
         currentStar = stars[i];
-        enterStar(currentStar);
+        startTextExpansionTransition(currentStar);
         
         // Play a sound based on star size
         let noteFreq = map(stars[i].radius, 3, 15, 523.25, 783.99); // C5 to G5
@@ -391,32 +722,6 @@ function mousePressed() {
       playTone(329.63, 100); // E4
       setTimeout(() => playTone(293.66, 100), 100); // D4
       setTimeout(() => playTone(261.63, 100), 200); // C4
-    }
-  }
-}
-
-// Handle key presses
-function keyPressed() {
-  if (key === ' ' && !insideStar) {
-    // Ask user for a new memory
-    let newMemory = prompt("请输入你想分享的记忆 / Please enter a memory you want to share:");
-    
-    if (newMemory && newMemory.trim() !== "") {
-      // Add to memories list
-      memories.push(newMemory);
-      
-      // Create a new star with this memory
-      let x = random(width * 0.1, width * 0.9);
-      let y = random(height * 0.1, height * 0.9);
-      let size = random(5, 15);
-      
-      stars.push(new Star(x, y, size, [newMemory]));
-      
-      // Play ascending note sequence for new memory
-      let baseNote = 261.63; // C4
-      playTone(baseNote, 150);
-      setTimeout(() => playTone(baseNote * 5/4, 150), 150); // E4
-      setTimeout(() => playTone(baseNote * 3/2, 150), 300); // G4
     }
   }
 }
@@ -458,8 +763,60 @@ function toggleMicrophone() {
   }
 }
 
-// Enter a star and display its memories
-function enterStar(star) {
+// Start speech recognition
+function startSpeechRecognition() {
+  if (speechRec && !isRecognizing) {
+    try {
+      speechRec.start();
+      isRecognizing = true;
+      console.log("Speech recognition started");
+    } catch (err) {
+      console.error("Could not start speech recognition:", err);
+      alert("无法启动语音识别！\nCould not start speech recognition!");
+    }
+  }
+}
+
+// Stop speech recognition
+function stopSpeechRecognition() {
+  if (speechRec && isRecognizing) {
+    try {
+      speechRec.stop();
+      isRecognizing = false;
+      console.log("Speech recognition stopped");
+    } catch (err) {
+      console.error("Could not stop speech recognition:", err);
+    }
+  }
+}
+
+// Create a star from recognized voice
+function createStarFromVoice(text) {
+  if (text && text.trim() !== "") {
+    // Add to memories list
+    memories.push(text);
+    
+    // Create a new star with this memory
+    let x = random(width * 0.1, width * 0.9);
+    let y = random(height * 0.1, height * 0.9);
+    let size = random(5, 15);
+    
+    let star = new Star(x, y, size, [text]);
+    star.highlight = true;
+    stars.push(star);
+    
+    // Play ascending note sequence for new memory
+    let baseNote = 261.63; // C4
+    playTone(baseNote, 150);
+    setTimeout(() => playTone(baseNote * 5/4, 150), 150); // E4
+    setTimeout(() => playTone(baseNote * 3/2, 150), 300); // G4
+    
+    console.log("Created star from voice input:", text);
+  }
+}
+
+// Setup floating text for a star (called before transition) 
+function setupFloatingTextForStar(star) {
   insideStar = true;
   floatingTexts = [];
   textOrganized = false; // Start with scattered text
@@ -535,6 +892,32 @@ function exitStar() {
   floatingTexts = [];
 }
 
+// Handle key presses
+function keyPressed() {
+  if (key === ' ' && !insideStar) {
+    // Ask user for a new memory
+    let newMemory = prompt("请输入你想分享的记忆 / Please enter a memory you want to share:");
+    
+    if (newMemory && newMemory.trim() !== "") {
+      // Add to memories list
+      memories.push(newMemory);
+      
+      // Create a new star with this memory
+      let x = random(width * 0.1, width * 0.9);
+      let y = random(height * 0.1, height * 0.9);
+      let size = random(5, 15);
+      
+      stars.push(new Star(x, y, size, [newMemory]));
+      
+      // Play ascending note sequence for new memory
+      let baseNote = 261.63; // C4
+      playTone(baseNote, 150);
+      setTimeout(() => playTone(baseNote * 5/4, 150), 150); // E4
+      setTimeout(() => playTone(baseNote * 3/2, 150), 300); // G4
+    }
+  }
+}
+
 // Handle window resizing
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
@@ -564,6 +947,21 @@ class Star {
     // Glow effect
     this.glowSize = this.radius * 2;
     this.maxGlowSize = this.radius * 3;
+  }
+  
+  applyForce(fx, fy) {
+    // Offset original position
+    this.originalX += fx * 0.1;
+    this.originalY += fy * 0.1;
+    
+    // Apply immediate force
+    this.x += fx * 0.9;
+    this.y += fy * 0.9;
+    
+    // Increase glow effect
+    this.maxGlowSize = this.radius * (3 + random(1, 3));
+    this.highlight = true;
+    this.highlightTime = 0;
   }
   
   update(micLevel = 0) {
@@ -661,74 +1059,5 @@ class Star {
     // Check if point is inside star's clickable area
     let d = dist(px, py, this.x, this.y);
     return d < this.radius * 1.5; // Make hitbox a bit larger for easier clicking
-  }
-}
-
-// FloatingText class for characters inside stars
-class FloatingText {
-  constructor(character, x, y, size, organizedX, organizedY) {
-    this.character = character;
-    this.x = x;
-    this.y = y;
-    this.targetX = x;
-    this.targetY = y;
-    this.organizedX = organizedX || width/2;
-    this.organizedY = organizedY || height/2;
-    this.size = size;
-    
-    // Movement properties
-    this.xSpeed = random(-0.5, 0.5);
-    this.ySpeed = random(-0.5, 0.5);
-    
-    // Appearance properties
-    this.opacity = random(150, 255);
-    this.hue = random(180, 360);
-    
-    // Animation properties
-    this.movementSpeed = random(0.03, 0.06);
-  }
-  
-  update(organized = false) {
-    if (organized) {
-      // Move toward organized position
-      this.targetX = this.organizedX;
-      this.targetY = this.organizedY;
-    } else {
-      // Continue random movement
-      this.xSpeed += random(-0.1, 0.1);
-      this.ySpeed += random(-0.1, 0.1);
-      
-      // Cap speeds
-      this.xSpeed = constrain(this.xSpeed, -1, 1);
-      this.ySpeed = constrain(this.ySpeed, -1, 1);
-      
-      // Update target position based on random movement
-      this.targetX += this.xSpeed;
-      this.targetY += this.ySpeed;
-      
-      // Bounce off edges
-      if (this.targetX < width * 0.1 || this.targetX > width * 0.9) {
-        this.xSpeed *= -1;
-        this.targetX += this.xSpeed * 2;
-      }
-      if (this.targetY < height * 0.1 || this.targetY > height * 0.9) {
-        this.ySpeed *= -1;
-        this.targetY += this.ySpeed * 2;
-      }
-    }
-    
-    // Smoothly move toward target
-    this.x = lerp(this.x, this.targetX, this.movementSpeed);
-    this.y = lerp(this.y, this.targetY, this.movementSpeed);
-  }
-  
-  display() {
-    // Adapt opacity based on how close to target position
-    let distance = dist(this.x, this.y, this.targetX, this.targetY);
-    let dynamicOpacity = map(distance, 0, 50, this.opacity, this.opacity * 0.7);
-    
-    fill(this.hue, 70, 100, dynamicOpacity);
-    textSize(this.size);
-    text(this.character, this.x, this.y);
   }
 }
